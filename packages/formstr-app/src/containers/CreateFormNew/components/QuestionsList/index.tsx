@@ -58,6 +58,7 @@ export const QuestionsList = () => {
     updateQuestionsList,
     setIsLeftMenuOpen,
     bottomElementRef,
+    // shouldShowQuestion
   } = useFormBuilderContext();
 
   const handleDescriptionChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
@@ -115,21 +116,27 @@ export const QuestionsList = () => {
         className="reorder-group"
       >
         <div>
-          {questionsList.map((question, idx) => (
-            <Reorder.Item
-              value={question}
-              key={question[1]}
-              dragListener={true}
-            >
-              <QuestionCard
-                question={question}
-                onEdit={editQuestion}
-                onReorderKey={onReorderKey}
-                firstQuestion={idx === 0}
-                lastQuestion={idx === questionsList.length - 1}
-              />
-            </Reorder.Item>
-          ))}
+
+        {questionsList.map((question, idx) => {
+  // Check if the question should be shown based on conditions
+  // if (!shouldShowQuestion(question)) return null;
+
+            return (
+              <Reorder.Item
+                value={question}
+                key={question[1]}
+                dragListener={false}
+              >
+                <QuestionCard
+                  question={question}
+                  onEdit={editQuestion}
+                  onReorderKey={onReorderKey}
+                  firstQuestion={idx === 0}
+                  lastQuestion={idx === questionsList.length - 1}
+                />
+              </Reorder.Item>
+            );
+          })}
           <div ref={bottomElementRef}></div>
         </div>
       </Reorder.Group>
