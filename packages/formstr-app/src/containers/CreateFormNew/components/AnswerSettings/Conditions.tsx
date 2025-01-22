@@ -117,7 +117,6 @@ const Conditions: React.FC<ConditionsProps> = ({
   const availableQuestions = questionsList.filter(
     (q) => q[1] !== questionIdInFocus
   );
-
   const conditions = answerSettings.conditions || {
     rules: [],
   };
