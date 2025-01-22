@@ -1,5 +1,9 @@
-import { Select, Button, Space, Typography, Modal } from "antd";
-import { PlusOutlined, DeleteOutlined, SettingOutlined } from "@ant-design/icons";
+import { Select, Button, Space, Typography, Modal, Input } from "antd";
+import {
+  PlusOutlined,
+  DeleteOutlined,
+  SettingOutlined,
+} from "@ant-design/icons";
 import useFormBuilderContext from "../../hooks/useFormBuilderContext";
 import styled from "styled-components";
 import { useState } from "react";
@@ -30,39 +34,40 @@ const StyleWrapper = styled.div`
   }
 `;
 
+interface ConditionRule {
+  questionId: string;
+  value: string | string[];
+}
+
 interface ConditionsProps {
   answerSettings: {
     conditions?: {
-      rules: Array<{
-        questionId: string;
-        value: "yes" | "no";
-      }>;
+      rules: ConditionRule[];
     };
   };
   handleAnswerSettings: (settings: any) => void;
 }
 
 const Conditions: React.FC<ConditionsProps> = ({
-    answerSettings,
-    handleAnswerSettings,
-  }) => {
-    const { questionsList, questionIdInFocus } = useFormBuilderContext();
-    const [isModalOpen, setIsModalOpen] = useState(false);
+  answerSettings,
+  handleAnswerSettings,
+}) => {
+  const { questionsList, questionIdInFocus } = useFormBuilderContext();
+  const [isModalOpen, setIsModalOpen] = useState(false);
   
-    // Get all questions that come before this one
-    const availableQuestions = questionsList.slice(
-      0,
-      questionsList.findIndex((q) => q[1] === questionIdInFocus)
-    );
+  const availableQuestions = questionsList.slice(
+    0,
+    questionsList.findIndex((q) => q[1] === questionIdInFocus)
+  );
   
-    const conditions = answerSettings.conditions || {
-        rules: []
-      };
-      
+  const conditions = answerSettings.conditions || {
+    rules: [],
+  };
+
   const handleAddRule = () => {
     const newConditions = {
       ...conditions,
-      rules: [...conditions.rules, { questionId: "", value: "yes" }],
+      rules: [...conditions.rules, { questionId: "", value: "" }],
     };
     handleAnswerSettings({ conditions: newConditions });
   };
@@ -80,10 +85,19 @@ const Conditions: React.FC<ConditionsProps> = ({
 
   const updateRule = (index: number, field: string, value: any) => {
     const newRules = [...conditions.rules];
-    newRules[index] = {
-      ...newRules[index],
-      [field]: value,
-    };
+    if (field === "questionId") {
+      // Reset value when changing question
+      const questionType = getQuestionType(value);
+      newRules[index] = {
+        questionId: value,
+        value: questionType === AnswerTypes.checkboxes ? [] : "",
+      };
+    } else {
+      newRules[index] = {
+        ...newRules[index],
+        [field]: value,
+      };
+    }
     handleAnswerSettings({
       conditions: {
         ...conditions,
@@ -91,6 +105,85 @@ const Conditions: React.FC<ConditionsProps> = ({
       },
     });
   };
+
+  const getQuestionType = (questionId: string): string => {
+    const question = availableQuestions.find((q) => q[1] === questionId);
+    if (!question) return AnswerTypes.shortText;
+
+    try {
+      const answerSettings = JSON.parse(question[5] || "{}");
+      return answerSettings.renderElement || AnswerTypes.shortText;
+    } catch {
+      return AnswerTypes.shortText;
+    }
+  };
+
+  const getQuestionChoices = (questionId: string): Array<[string, string]> => {
+    const question = availableQuestions.find((q) => q[1] === questionId);
+    if (!question) return [];
+
+    try {
+      const options = JSON.parse(question[4] || "[]") as Array<
+        [string, string]
+      >;
+      return options;
+    } catch (e) {
+      return [];
+    }
+  };
+
+  // Render value input based on question type
+  // In Conditions.tsx
+const renderValueInput = (rule: ConditionRule, index: number) => {
+  const questionType = getQuestionType(rule.questionId);
+  const choices = getQuestionChoices(rule.questionId);
+
+  switch (questionType) {
+    case 'radioButton':
+    case 'dropdown':
+      return (
+        <Select
+          placeholder="Select answer"
+          value={rule.value}
+          onChange={(value) => updateRule(index, "value", value)}
+          style={{ width: "100%" }}
+        >
+          {choices.map(([id, label]) => (
+            <Select.Option key={id} value={id}>  {/* Changed to use ID instead of label */}
+              {label}
+            </Select.Option>
+          ))}
+        </Select>
+      );
+
+    case 'checkboxes':
+      return (
+        <Select
+          mode="multiple"
+          placeholder="Select answers"
+          value={Array.isArray(rule.value) ? rule.value : []}
+          onChange={(value) => updateRule(index, "value", value)}
+          style={{ width: "100%" }}
+        >
+          {choices.map(([id, label]) => (
+            <Select.Option key={id} value={id}>  {/* Changed to use ID instead of label */}
+              {label}
+            </Select.Option>
+          ))}
+        </Select>
+      );
+
+    default:
+      return (
+        <Input 
+          placeholder="Enter expected answer"
+          value={typeof rule.value === 'string' ? rule.value : ''}
+          onChange={(e) => updateRule(index, "value", e.target.value)}
+          style={{ width: "100%" }}
+        />
+      );
+  }
+};
 
   return (
     <StyleWrapper>
@@ -137,15 +230,8 @@ const Conditions: React.FC<ConditionsProps> = ({
               </div>
 
               <div className="rule-item">
-                <Text className="rule-label">is answered as</Text>
-                <Select
-                  value={rule.value}
-                  onChange={(value) => updateRule(index, "value", value)}
-                  style={{ width: "100%" }}
-                >
-                  <Select.Option value="yes">Yes</Select.Option>
-                  <Select.Option value="no">No</Select.Option>
-                </Select>
+                <Text className="rule-label">Expected answer</Text>
+                {renderValueInput(rule, index)}
               </div>
 
               <Button

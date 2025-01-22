@@ -72,7 +72,9 @@ export const FormFiller: React.FC<FormFillerProps> = ({
   const hideTitleImage = searchParams.get("hideTitleImage") === "true";
   const viewKeyParams = searchParams.get("viewKey");
   const hideDescription = searchParams.get("hideDescription") === "true";
-  const [formAnswers, setFormAnswers] = useState<Record<string, string>>({});
+  const [formAnswers, setFormAnswers] = useState<
+    Record<string, string | string[]>
+  >({});
   const navigate = useNavigate();
 
   isPreview = !!formSpec;
@@ -119,23 +121,78 @@ export const FormFiller: React.FC<FormFillerProps> = ({
     initialize(pubKey, formId, relays);
   }, [formEvent, formTemplate, userPubKey]);
 
-  const handleInput = (questionId: string, answer: string, message?: string) => {
-    if (!answer || answer === "") {
+  const handleInput = (
+    questionId: string,
+    answer: string | string[],
+    message?: string
+  ) => {
+    if (
+      !answer ||
+      (typeof answer === "string" && answer === "") ||
+      (Array.isArray(answer) && answer.length === 0)
+    ) {
       form.setFieldValue(questionId, null);
-      setFormAnswers(prev => ({...prev, [questionId]: ""}));
+      setFormAnswers((prev) => ({
+        ...prev,
+        [questionId]: Array.isArray(answer) ? [] : "",
+      }));
       return;
     }
     form.setFieldValue(questionId, [answer, message]);
-    setFormAnswers(prev => ({...prev, [questionId]: answer}));
+    setFormAnswers((prev) => ({ ...prev, [questionId]: answer }));
   };
+
+  interface Rule {
+    questionId: string;
+    value: string | string[];
+  }
+
+  interface AnswerSettings {
+    conditions?: {
+      rules: Rule[];
+    };
+    renderElement?: string;
+  }
 
   const shouldShowQuestion = (question: Field): boolean => {
     try {
-      const answerSettings = JSON.parse(question[5] || '{}') as AnswerSettings;
+      const answerSettings = JSON.parse(question[5] || "{}");
       const conditions = answerSettings.conditions;
-      if (!conditions?.rules?.length) return true;
-      return conditions.rules.every(rule => formAnswers[rule.questionId] === rule.value);
-    } catch {
+
+      if (!conditions?.rules?.length) {
+        return true;
+      }
+
+      // Use every() to check that ALL conditions are met
+      return conditions.rules.every((rule: Rule) => {
+        const selectedAnswer = formAnswers[rule.questionId];
+
+        const conditionQuestion = fields.find((q) => q[1] === rule.questionId);
+        if (!conditionQuestion) return false;
+
+        const conditionSettings = JSON.parse(conditionQuestion[5] || "{}");
+        const questionType = conditionSettings.renderElement;
+
+        if (questionType === "checkboxes") {
+          // Handle the case where selectedAnswer could be string or string[]
+          const selectedAnswers =
+            typeof selectedAnswer === "string"
+              ? selectedAnswer.split(";")
+              : selectedAnswer || [];
+          const ruleValues = Array.isArray(rule.value)
+            ? rule.value
+            : [rule.value];
+
+          // Return true only if ALL required values are selected
+          return ruleValues.every((v) => selectedAnswers.includes(v));
+        }
+
+        // For other types
+        const matches = selectedAnswer === rule.value;
+        return matches;
+      });
+    } catch (error) {
+      console.error("Error in shouldShowQuestion:", error);
       return true;
     }
   };
@@ -299,8 +356,11 @@ export const FormFiller: React.FC<FormFillerProps> = ({
                 }
               >
                 <div>
-                <FormFields fields={visibleFields} handleInput={handleInput} />
-                <>{renderSubmitButton()}</>
+                  <FormFields
+                    fields={visibleFields}
+                    handleInput={handleInput}
+                  />
+                  <>{renderSubmitButton()}</>
                 </div>
               </Form>
             </div>
