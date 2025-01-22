@@ -54,11 +54,10 @@ const Conditions: React.FC<ConditionsProps> = ({
 }) => {
   const { questionsList, questionIdInFocus } = useFormBuilderContext();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  
-  const availableQuestions = questionsList.slice(
-    0,
-    questionsList.findIndex((q) => q[1] === questionIdInFocus)
-  );
+
+const availableQuestions = questionsList.filter(
+  (q) => q[1] !== questionIdInFocus
+);
   
   const conditions = answerSettings.conditions || {
     rules: [],
