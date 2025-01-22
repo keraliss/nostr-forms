@@ -4,7 +4,7 @@ import FormTitle from "../FormTitle";
 import StyleWrapper from "./style";
 import DescriptionStyle from "./description.style";
 import useFormBuilderContext from "../../hooks/useFormBuilderContext";
-import { ChangeEvent, useState, useRef, useEffect } from "react";
+import { ChangeEvent, useState, useRef } from "react";
 import { Reorder, motion, useDragControls } from "framer-motion";
 import { Field } from "../../../../nostr/types";
 

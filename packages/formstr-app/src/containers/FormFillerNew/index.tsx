@@ -303,19 +303,55 @@ export const FormFiller: React.FC<FormFillerProps> = ({
     return result;
   };
 
+  interface Rule {
+    questionId: string;
+    value: string | string[];
+  }
+
+  interface AnswerSettings {
+    conditions?: {
+      rules: Rule[];
+    };
+    renderElement?: string;
+  }
+
   const shouldShowQuestion = (question: Field): boolean => {
     try {
-      const answerSettings = JSON.parse(question[5] || "{}") as AnswerSettings;
+      const answerSettings = JSON.parse(question[5] || "{}");
       const conditions = answerSettings.conditions;
 
-      if (!conditions || !conditions.rules || conditions.rules.length === 0) {
+      if (!conditions?.rules?.length) {
         return true;
       }
 
-      const fields =
-        (formTemplate?.filter((tag) => tag[0] === "field") as Field[]) || [];
+      // Use every() to check that ALL conditions are met
+      return conditions.rules.every((rule: Rule) => {
+        const selectedAnswer = formAnswers[rule.questionId];
 
-      return evaluateGroup(conditions, formAnswers, fields);
+        const conditionQuestion = fields.find((q) => q[1] === rule.questionId);
+        if (!conditionQuestion) return false;
+
+        const conditionSettings = JSON.parse(conditionQuestion[5] || "{}");
+        const questionType = conditionSettings.renderElement;
+
+        if (questionType === "checkboxes") {
+          // Handle the case where selectedAnswer could be string or string[]
+          const selectedAnswers =
+            typeof selectedAnswer === "string"
+              ? selectedAnswer.split(";")
+              : selectedAnswer || [];
+          const ruleValues = Array.isArray(rule.value)
+            ? rule.value
+            : [rule.value];
+
+          // Return true only if ALL required values are selected
+          return ruleValues.every((v) => selectedAnswers.includes(v));
+        }
+
+        // For other types
+        const matches = selectedAnswer === rule.value;
+        return matches;
+      });
     } catch (error) {
       console.error("Error in shouldShowQuestion:", error);
       return true;
