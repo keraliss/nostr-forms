@@ -158,7 +158,12 @@ export const FormFiller: React.FC<FormFillerProps> = ({
   interface Rule {
     questionId: string;
     value: string | string[];
-    operator?: 'equals' | 'greaterThan' | 'lessThan' | 'greaterThanEqual' | 'lessThanEqual';
+    operator?:
+      | "equals"
+      | "greaterThan"
+      | "lessThan"
+      | "greaterThanEqual"
+      | "lessThanEqual";
   }
 
   const shouldShowQuestion = (question: Field): boolean => {
@@ -169,11 +174,9 @@ export const FormFiller: React.FC<FormFillerProps> = ({
       if (!conditions?.rules?.length) {
         return true;
       }
-
-      // Use every() to check that ALL conditions are met
-      return conditions.rules.every((rule: Rule) => {
+      const evaluator = conditions.logicType === "OR" ? "some" : "every";
+      return conditions.rules[evaluator]((rule: Rule) => {
         const selectedAnswer = formAnswers[rule.questionId];
-
         const conditionQuestion = fields.find((q) => q[1] === rule.questionId);
         if (!conditionQuestion) return false;
 
@@ -181,7 +184,6 @@ export const FormFiller: React.FC<FormFillerProps> = ({
         const questionType = conditionSettings.renderElement;
 
         if (questionType === "checkboxes") {
-          // Handle the case where selectedAnswer could be string or string[]
           const selectedAnswers =
             typeof selectedAnswer === "string"
               ? selectedAnswer.split(";")
@@ -189,21 +191,24 @@ export const FormFiller: React.FC<FormFillerProps> = ({
           const ruleValues = Array.isArray(rule.value)
             ? rule.value
             : [rule.value];
-
-          // Return true only if ALL required values are selected
           return ruleValues.every((v) => selectedAnswers.includes(v));
         }
 
         if (questionType === AnswerTypes.number) {
           const numAnswer = Number(selectedAnswer);
           const numValue = Number(rule.value);
-          
-          switch(rule.operator) {
-            case 'greaterThan': return numAnswer > numValue;
-            case 'lessThan': return numAnswer < numValue;
-            case 'greaterThanEqual': return numAnswer >= numValue;
-            case 'lessThanEqual': return numAnswer <= numValue;
-            default: return numAnswer === numValue;
+
+          switch (rule.operator) {
+            case "greaterThan":
+              return numAnswer > numValue;
+            case "lessThan":
+              return numAnswer < numValue;
+            case "greaterThanEqual":
+              return numAnswer >= numValue;
+            case "lessThanEqual":
+              return numAnswer <= numValue;
+            default:
+              return numAnswer === numValue;
           }
         }
 
@@ -214,6 +219,7 @@ export const FormFiller: React.FC<FormFillerProps> = ({
       return true;
     }
   };
+
   const saveResponse = async (anonymous: boolean = true) => {
     if (!formId || !pubKey) {
       throw "Cant submit to a form that has not been published";
@@ -335,7 +341,7 @@ export const FormFiller: React.FC<FormFillerProps> = ({
     ) as IFormSettings;
     fields = formTemplate.filter((tag) => tag[0] === "field") as Field[];
     const visibleFields = fields.filter(shouldShowQuestion);
-    
+
     return (
       <FillerStyle $isPreview={isPreview}>
         {editKey && !isPreview ? (

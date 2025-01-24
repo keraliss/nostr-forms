@@ -54,6 +54,7 @@ interface ConditionsProps {
   answerSettings: {
     conditions?: {
       rules: ConditionRule[];
+      logicType?: 'AND' | 'OR';
     };
   };
   handleAnswerSettings: (settings: any) => void;
@@ -290,6 +291,25 @@ const Conditions: React.FC<ConditionsProps> = ({
           ]}
           width={600}
         >
+
+{conditions.rules.length > 1 && (
+    <div className="rule-item">
+      <Text className="rule-label">Rules logic</Text>
+      <Select
+        value={conditions.logicType || 'AND'}
+        onChange={(value) => handleAnswerSettings({
+          conditions: {
+            ...conditions,
+            logicType: value
+          }
+        })}
+        style={{ width: "100%" }}
+      >
+        <Select.Option value="AND">All conditions must be true</Select.Option>
+        <Select.Option value="OR">Any condition must be true</Select.Option>
+      </Select>
+    </div>
+  )}
           {conditions.rules.map((rule, index) => (
             <div key={index} className="condition-rule">
               <div className="rule-item">
