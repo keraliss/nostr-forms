@@ -26,6 +26,7 @@ import { AddressPointer } from "nostr-tools/nip19";
 import { LoadingOutlined } from "@ant-design/icons";
 import { sendNotification } from "../../nostr/common";
 import { sendResponses } from "../../nostr/common";
+import { AnswerTypes } from "@formstr/sdk/dist/interfaces";
 
 interface Rule {
   questionId: string;
@@ -154,6 +155,12 @@ export const FormFiller: React.FC<FormFillerProps> = ({
     renderElement?: string;
   }
 
+  interface Rule {
+    questionId: string;
+    value: string | string[];
+    operator?: 'equals' | 'greaterThan' | 'lessThan' | 'greaterThanEqual' | 'lessThanEqual';
+  }
+
   const shouldShowQuestion = (question: Field): boolean => {
     try {
       const answerSettings = JSON.parse(question[5] || "{}");
@@ -187,16 +194,26 @@ export const FormFiller: React.FC<FormFillerProps> = ({
           return ruleValues.every((v) => selectedAnswers.includes(v));
         }
 
-        // For other types
-        const matches = selectedAnswer === rule.value;
-        return matches;
+        if (questionType === AnswerTypes.number) {
+          const numAnswer = Number(selectedAnswer);
+          const numValue = Number(rule.value);
+          
+          switch(rule.operator) {
+            case 'greaterThan': return numAnswer > numValue;
+            case 'lessThan': return numAnswer < numValue;
+            case 'greaterThanEqual': return numAnswer >= numValue;
+            case 'lessThanEqual': return numAnswer <= numValue;
+            default: return numAnswer === numValue;
+          }
+        }
+
+        return selectedAnswer?.toString() === rule.value?.toString();
       });
     } catch (error) {
       console.error("Error in shouldShowQuestion:", error);
       return true;
     }
   };
-  
   const saveResponse = async (anonymous: boolean = true) => {
     if (!formId || !pubKey) {
       throw "Cant submit to a form that has not been published";

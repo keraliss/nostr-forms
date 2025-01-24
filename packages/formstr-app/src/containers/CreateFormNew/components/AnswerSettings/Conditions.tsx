@@ -1,4 +1,14 @@
-import { Select, Button, Space, Typography, Modal, Input } from "antd";
+import {
+  Select,
+  Button,
+  Space,
+  Typography,
+  Modal,
+  Input,
+  InputNumber,
+  DatePicker,
+  TimePicker,
+} from "antd";
 import {
   PlusOutlined,
   DeleteOutlined,
@@ -8,6 +18,7 @@ import useFormBuilderContext from "../../hooks/useFormBuilderContext";
 import styled from "styled-components";
 import { useState } from "react";
 import { AnswerTypes } from "@formstr/sdk/dist/interfaces";
+import dayjs from "dayjs";
 
 const { Text } = Typography;
 
@@ -48,6 +59,17 @@ interface ConditionsProps {
   handleAnswerSettings: (settings: any) => void;
 }
 
+interface ConditionRule {
+  questionId: string;
+  value: string | string[];
+  operator?:
+    | "equals"
+    | "greaterThan"
+    | "lessThan"
+    | "greaterThanEqual"
+    | "lessThanEqual";
+}
+
 const Conditions: React.FC<ConditionsProps> = ({
   answerSettings,
   handleAnswerSettings,
@@ -55,10 +77,10 @@ const Conditions: React.FC<ConditionsProps> = ({
   const { questionsList, questionIdInFocus } = useFormBuilderContext();
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-const availableQuestions = questionsList.filter(
-  (q) => q[1] !== questionIdInFocus
-);
-  
+  const availableQuestions = questionsList.filter(
+    (q) => q[1] !== questionIdInFocus
+  );
+
   const conditions = answerSettings.conditions || {
     rules: [],
   };
@@ -133,56 +155,114 @@ const availableQuestions = questionsList.filter(
 
   // Render value input based on question type
   // In Conditions.tsx
-const renderValueInput = (rule: ConditionRule, index: number) => {
-  const questionType = getQuestionType(rule.questionId);
-  const choices = getQuestionChoices(rule.questionId);
+  const renderValueInput = (rule: ConditionRule, index: number) => {
+    const questionType = getQuestionType(rule.questionId);
+    const choices = getQuestionChoices(rule.questionId);
 
-  switch (questionType) {
-    case 'radioButton':
-    case 'dropdown':
-      return (
-        <Select
-          placeholder="Select answer"
-          value={rule.value}
-          onChange={(value) => updateRule(index, "value", value)}
-          style={{ width: "100%" }}
-        >
-          {choices.map(([id, label]) => (
-            <Select.Option key={id} value={id}>  {/* Changed to use ID instead of label */}
-              {label}
-            </Select.Option>
-          ))}
-        </Select>
-      );
+    console.log("rule", rule);
+    switch (questionType) {
+      case "radioButton":
+      case "dropdown":
+        return (
+          <Select
+            placeholder="Select answer"
+            value={rule.value}
+            onChange={(value) => updateRule(index, "value", value)}
+            style={{ width: "100%" }}
+          >
+            {choices.map(([id, label]) => (
+              <Select.Option key={id} value={id}>
+                {" "}
+                {/* Changed to use ID instead of label */}
+                {label}
+              </Select.Option>
+            ))}
+          </Select>
+        );
 
-    case 'checkboxes':
-      return (
-        <Select
-          mode="multiple"
-          placeholder="Select answers"
-          value={Array.isArray(rule.value) ? rule.value : []}
-          onChange={(value) => updateRule(index, "value", value)}
-          style={{ width: "100%" }}
-        >
-          {choices.map(([id, label]) => (
-            <Select.Option key={id} value={id}>  {/* Changed to use ID instead of label */}
-              {label}
-            </Select.Option>
-          ))}
-        </Select>
-      );
-
-    default:
-      return (
-        <Input 
-          placeholder="Enter expected answer"
-          value={typeof rule.value === 'string' ? rule.value : ''}
-          onChange={(e) => updateRule(index, "value", e.target.value)}
-          style={{ width: "100%" }}
-        />
-      );
-  }
-};
+      case "checkboxes":
+        return (
+          <Select
+            mode="multiple"
+            placeholder="Select answers"
+            value={Array.isArray(rule.value) ? rule.value : []}
+            onChange={(value) => updateRule(index, "value", value)}
+            style={{ width: "100%" }}
+          >
+            {choices.map(([id, label]) => (
+              <Select.Option key={id} value={id}>
+                {" "}
+                {/* Changed to use ID instead of label */}
+                {label}
+              </Select.Option>
+            ))}
+          </Select>
+        );
+      case AnswerTypes.number:
+        return (
+          <div>
+            <Select
+              value={rule.operator || "equals"}
+              onChange={(value) => updateRule(index, "operator", value)}
+              style={{ width: "100px", marginRight: "8px" }}
+            >
+              <Select.Option value="equals">=</Select.Option>
+              <Select.Option value="greaterThan">&gt;</Select.Option>
+              <Select.Option value="lessThan">&lt;</Select.Option>
+              <Select.Option value="greaterThanEqual">≥</Select.Option>
+              <Select.Option value="lessThanEqual">≤</Select.Option>
+            </Select>
+            <InputNumber
+              placeholder="Enter value"
+              value={
+                typeof rule.value === "string" ? Number(rule.value) : undefined
+              }
+              onChange={(value) =>
+                updateRule(index, "value", value?.toString())
+              }
+              style={{ width: "calc(100% - 108px)" }}
+            />
+          </div>
+        );
+      case AnswerTypes.date:
+        return (
+          <DatePicker
+            placeholder="Select expected date"
+            value={
+              typeof rule.value === "string" ? dayjs(rule.value) : undefined
+            }
+            onChange={(date) =>
+              updateRule(index, "value", date?.format("YYYY-MM-DD"))
+            }
+            style={{ width: "100%" }}
+          />
+        );
+      case AnswerTypes.time:
+        return (
+          <TimePicker
+            placeholder="Select expected time"
+            value={
+              typeof rule.value === "string"
+                ? dayjs(rule.value, "HH:mm:ss")
+                : undefined
+            }
+            onChange={(time) =>
+              updateRule(index, "value", time?.format("HH:mm:ss"))
+            }
+            style={{ width: "100%" }}
+          />
+        );
+      default:
+        return (
+          <Input
+            placeholder="Enter expected answer"
+            value={typeof rule.value === "string" ? rule.value : ""}
+            onChange={(e) => updateRule(index, "value", e.target.value)}
+            style={{ width: "100%" }}
+          />
+        );
+    }
+  };
 
   return (
     <StyleWrapper>
