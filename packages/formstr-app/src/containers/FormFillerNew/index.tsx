@@ -315,6 +315,12 @@ export const FormFiller: React.FC<FormFillerProps> = ({
     renderElement?: string;
   }
 
+  interface Rule {
+    questionId: string;
+    value: string | string[];
+    operator?: 'equals' | 'greaterThan' | 'lessThan' | 'greaterThanEqual' | 'lessThanEqual';
+  }
+
   const shouldShowQuestion = (question: Field): boolean => {
     try {
       const answerSettings = JSON.parse(question[5] || "{}");
@@ -348,9 +354,20 @@ export const FormFiller: React.FC<FormFillerProps> = ({
           return ruleValues.every((v) => selectedAnswers.includes(v));
         }
 
-        // For other types
-        const matches = selectedAnswer === rule.value;
-        return matches;
+        if (questionType === AnswerTypes.number) {
+          const numAnswer = Number(selectedAnswer);
+          const numValue = Number(rule.value);
+          
+          switch(rule.operator) {
+            case 'greaterThan': return numAnswer > numValue;
+            case 'lessThan': return numAnswer < numValue;
+            case 'greaterThanEqual': return numAnswer >= numValue;
+            case 'lessThanEqual': return numAnswer <= numValue;
+            default: return numAnswer === numValue;
+          }
+        }
+
+        return selectedAnswer?.toString() === rule.value?.toString();
       });
     } catch (error) {
       console.error("Error in shouldShowQuestion:", error);
