@@ -95,13 +95,9 @@ export const FormFiller: React.FC<FormFillerProps> = ({
     formId: string,
     relays?: string[]
   ) => {
-    console.log("Author and id are", formAuthor, formId);
     if (!formEvent) {
       const form = await fetchFormTemplate(formAuthor, formId, relays);
-      if (!form) {
-        alert("Could not find the form");
-        return;
-      }
+      if (!form) return;
       setFormEvent(form);
       setAllowedUsers(getAllowedUsers(form));
       const formSpec = await getFormSpec(
@@ -247,13 +243,12 @@ export const FormFiller: React.FC<FormFillerProps> = ({
     );
   };
 
-  const renderSubmitButton = () => {
-    console.log("Allowed users are", allowedUsers);
+  const renderSubmitButton = (settings: IFormSettings) => {
     if (isPreview) return null;
     if (allowedUsers.length === 0) {
       return (
         <SubmitButton
-          selfSign={false}
+          selfSign={settings.disallowAnonymous}
           edit={false}
           onSubmit={saveResponse}
           form={form}
@@ -379,11 +374,10 @@ export const FormFiller: React.FC<FormFillerProps> = ({
                 }
               >
                 <div>
-                  <FormFields
-                    fields={visibleFields}
-                    handleInput={handleInput}
-                  />
-                  <>{renderSubmitButton()}</>
+
+                  <FormFields fields={visibleFields} handleInput={handleInput} />
+                  <>{renderSubmitButton(settings)}</>
+
                 </div>
               </Form>
             </div>

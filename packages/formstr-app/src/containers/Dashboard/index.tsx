@@ -80,6 +80,7 @@ export const Dashboard = () => {
 
   const renderForms = () => {
     if (filter === "local") {
+      if (localForms.length == 0) return <EmptyScreen />;
       return localForms.map((localForm: ILocalForm) => (
         <LocalFormCard
           key={localForm.key}
@@ -90,6 +91,7 @@ export const Dashboard = () => {
         />
       ));
     } else if (filter === "shared") {
+      if (nostrForms.size == 0) return <EmptyScreen />;
       return Array.from(nostrForms.values()).map((formEvent: Event) => {
         let d_tag = formEvent.tags.filter((t) => t[0] === "d")[0]?.[1];
         let key = `${formEvent.kind}:${formEvent.pubkey}:${
@@ -150,16 +152,8 @@ export const Dashboard = () => {
             </div>
           </Dropdown>
         </div>
-        {!pubkey && localForms.length !== 0 ? (
-          <div className="form-cards-container">{renderForms()}</div>
-        ) : null}
-
-        {!pubkey && localForms.length === 0 && (
-          <LoggedOutScreen requestLogin={requestPubkey} />
-        )}
+        <div className="form-cards-container">{renderForms()}</div>
         <>
-          <div className="form-cards-container">{renderForms()}</div>
-          {!nostrForms.size && !localForms.length ? <EmptyScreen /> : null}
           {state && (
             <FormDetails
               isOpen={showFormDetails}
