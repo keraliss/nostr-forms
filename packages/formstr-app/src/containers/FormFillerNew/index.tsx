@@ -27,6 +27,7 @@ import { sendNotification } from "../../nostr/common";
 import { sendResponses } from "../../nostr/common";
 import { AnswerTypes } from "@formstr/sdk/dist/interfaces";
 
+// Define interfaces for condition rules and groups
 interface ConditionRule {
   questionId: string;
   value: string | string[];
@@ -40,13 +41,12 @@ interface ConditionRule {
     | "lessThan"
     | "greaterThanEqual"
     | "lessThanEqual";
-
-  nextLogic?: "AND" | "OR";
+  nextLogic?: "AND" | "OR"; // How this rule combines with the next one
 }
 
 interface ConditionGroup {
   rules: (ConditionRule | ConditionGroup)[];
-  nextLogic?: "AND" | "OR";
+  nextLogic?: "AND" | "OR"; // How this group combines with the next element
 }
 
 interface AnswerSettings {
@@ -66,8 +66,9 @@ export const FormFiller: React.FC<FormFillerProps> = ({
   embedded,
 }) => {
   const { naddr } = useParams();
-  let isPreview: boolean = false;
-  if (!naddr) isPreview = true;
+  let isPreview = !!formSpec;
+  if (!isPreview && !naddr)
+    return <Text> Not enough data to render this url </Text>;
   let decodedData;
   if (!isPreview) decodedData = nip19.decode(naddr!).data as AddressPointer;
   let pubKey = decodedData?.pubkey;
@@ -93,14 +94,11 @@ export const FormFiller: React.FC<FormFillerProps> = ({
   >({});
   const navigate = useNavigate();
 
-  isPreview = !!formSpec;
-
   if (!formId && !formSpec) {
     return null;
   }
 
   const onKeysFetched = (keys: Tag[] | null) => {
-    console.log("Keys got", keys);
     let editKey = keys?.find((k) => k[0] === "EditAccess")?.[1] || null;
     setEditKey(editKey);
   };
@@ -154,17 +152,27 @@ export const FormFiller: React.FC<FormFillerProps> = ({
     setFormAnswers((prev) => ({ ...prev, [questionId]: answer }));
   };
 
+  const getResponseRelays = (formEvent: Event) => {
+    let formRelays = formEvent.tags
+      .filter((r) => r[0] === "relay")
+      ?.map((r) => r[1]);
+    return Array.from(new Set([...(relays || []), ...(formRelays || [])]));
+  };
+
+  // Determine if a condition is a rule or a group
   function isConditionRule(
     condition: ConditionRule | ConditionGroup
   ): condition is ConditionRule {
     return "questionId" in condition;
   }
 
+  // Evaluate a single condition rule
   const evaluateRule = (
     rule: ConditionRule,
     answers: Record<string, string | string[]>,
     fields: Field[]
   ): boolean => {
+    // If there's no answer or it's empty, the condition is not met
     const answer = answers[rule.questionId];
     if (
       answer === undefined ||
@@ -175,6 +183,7 @@ export const FormFiller: React.FC<FormFillerProps> = ({
       return false;
     }
 
+    // Find the question to determine its type
     const question = fields.find((q) => q[1] === rule.questionId);
     if (!question) return false;
 
@@ -265,6 +274,8 @@ export const FormFiller: React.FC<FormFillerProps> = ({
       return false;
     }
   };
+
+  // Evaluate a group of conditions
   const evaluateGroup = (
     group: ConditionGroup,
     answers: Record<string, string | string[]>,
@@ -274,6 +285,15 @@ export const FormFiller: React.FC<FormFillerProps> = ({
       return true;
     }
 
+    // For backward compatibility with simple rule arrays
+    if (Array.isArray(group.rules) && group.rules.length > 0 && "questionId" in group.rules[0]) {
+      // Simple array of rules (old format)
+      return (group.rules as ConditionRule[]).every(rule => 
+        answers[rule.questionId] === rule.value
+      );
+    }
+
+    // Advanced evaluation with AND/OR logic
     let result = isConditionRule(group.rules[0])
       ? evaluateRule(group.rules[0] as ConditionRule, answers, fields)
       : evaluateGroup(group.rules[0] as ConditionGroup, answers, fields);
@@ -283,10 +303,12 @@ export const FormFiller: React.FC<FormFillerProps> = ({
       const prevRule = group.rules[i - 1];
       const currentRule = group.rules[i];
 
-      // Get the logic type from the previous rule or default to group's logic type
+      // Get the logic type from the previous rule or default to AND
       const logicType = isConditionRule(prevRule)
         ? (prevRule as ConditionRule).nextLogic
         : (prevRule as ConditionGroup).nextLogic || "AND";
+      
+      // Evaluate the current rule
       const currentResult = isConditionRule(currentRule)
         ? evaluateRule(currentRule as ConditionRule, answers, fields)
         : evaluateGroup(currentRule as ConditionGroup, answers, fields);
@@ -295,7 +317,7 @@ export const FormFiller: React.FC<FormFillerProps> = ({
       if (logicType === "AND") {
         result = result && currentResult;
       } else {
-        // OR
+        // OR logic
         result = result || currentResult;
       }
     }
@@ -303,87 +325,34 @@ export const FormFiller: React.FC<FormFillerProps> = ({
     return result;
   };
 
-  interface Rule {
-    questionId: string;
-    value: string | string[];
-  }
-
-  interface AnswerSettings {
-    conditions?: {
-      rules: Rule[];
-    };
-    renderElement?: string;
-  }
-
-  interface Rule {
-    questionId: string;
-    value: string | string[];
-    operator?:
-      | "equals"
-      | "greaterThan"
-      | "lessThan"
-      | "greaterThanEqual"
-      | "lessThanEqual";
-  }
-
+  // Determine if a question should be displayed based on conditions
   const shouldShowQuestion = (question: Field): boolean => {
     try {
-      const answerSettings = JSON.parse(question[5] || "{}");
+      const answerSettings = JSON.parse(question[5] || "{}") as AnswerSettings;
       const conditions = answerSettings.conditions;
 
-      if (!conditions?.rules?.length) {
+      // If no conditions defined, always show the question
+      if (!conditions || !conditions.rules || conditions.rules.length === 0) {
         return true;
       }
-      const evaluator = conditions.logicType === "OR" ? "some" : "every";
-      return conditions.rules[evaluator]((rule: Rule) => {
-        const selectedAnswer = formAnswers[rule.questionId];
-        const conditionQuestion = fields.find((q) => q[1] === rule.questionId);
-        if (!conditionQuestion) return false;
 
-        const conditionSettings = JSON.parse(conditionQuestion[5] || "{}");
-        const questionType = conditionSettings.renderElement;
+      // Get all form fields for evaluation context
+      const fields =
+        (formTemplate?.filter((tag) => tag[0] === "field") as Field[]) || [];
 
-        if (questionType === "checkboxes") {
-          const selectedAnswers =
-            typeof selectedAnswer === "string"
-              ? selectedAnswer.split(";")
-              : selectedAnswer || [];
-          const ruleValues = Array.isArray(rule.value)
-            ? rule.value
-            : [rule.value];
-          return ruleValues.every((v) => selectedAnswers.includes(v));
-        }
-
-        if (questionType === AnswerTypes.number) {
-          const numAnswer = Number(selectedAnswer);
-          const numValue = Number(rule.value);
-
-          switch (rule.operator) {
-            case "greaterThan":
-              return numAnswer > numValue;
-            case "lessThan":
-              return numAnswer < numValue;
-            case "greaterThanEqual":
-              return numAnswer >= numValue;
-            case "lessThanEqual":
-              return numAnswer <= numValue;
-            default:
-              return numAnswer === numValue;
-          }
-        }
-
-        return selectedAnswer?.toString() === rule.value?.toString();
-      });
+      // Evaluate the conditions
+      return evaluateGroup(conditions, formAnswers, fields);
     } catch (error) {
       console.error("Error in shouldShowQuestion:", error);
-      return true;
+      return true; // On error, show the question
     }
   };
 
-  const saveResponse = async (anonymous: boolean = true) => {
-    if (!formId || !pubKey) {
-      throw "Cant submit to a form that has not been published";
+  const onSubmit = async (anonymous: boolean = true) => {
+    if (!isPreview && (!formId || !pubKey)) {
+      throw "Can't submit to a form that has not been published";
     }
+    
     let formResponses = form.getFieldsValue(true);
     const responses: Response[] = Object.keys(formResponses).map(
       (fieldId: string) => {
@@ -393,31 +362,38 @@ export const FormFiller: React.FC<FormFillerProps> = ({
         return ["response", fieldId, answer, JSON.stringify({ message })];
       }
     );
-    let anonUser = null;
-    if (anonymous) {
-      anonUser = generateSecretKey();
+    
+    // If formEvent and relays exist (non-preview mode), use sendResponses
+    if (!isPreview && formEvent) {
+      const anonUser = anonymous ? generateSecretKey() : null;
+      sendResponses(pubKey!, formId!, responses, anonUser, true, relays).then(
+        (res: any) => {
+          console.log("Submitted!");
+          sendNotification(formTemplate!, responses);
+          setFormSubmitted(true);
+          setThankYouScreen(true);
+        }
+      );
+    } else {
+      // Handle preview mode
+      sendNotification(formTemplate!, responses);
+      setFormSubmitted(true);
+      setThankYouScreen(true);
     }
-    sendResponses(pubKey, formId, responses, anonUser, true, relays).then(
-      (res: any) => {
-        console.log("Submitted!");
-        sendNotification(formTemplate!, responses);
-        setFormSubmitted(true);
-        setThankYouScreen(true);
-      }
-    );
   };
 
   const renderSubmitButton = (settings: IFormSettings) => {
     if (isPreview) return null;
+    if (!formEvent) return null;
     if (allowedUsers.length === 0) {
       return (
         <SubmitButton
           selfSign={settings.disallowAnonymous}
           edit={false}
-          onSubmit={saveResponse}
+          onSubmit={onSubmit}
           form={form}
-          formEvent={formEvent!}
-          relays={relays || []}
+          relays={getResponseRelays(formEvent)}
+          formEvent={formEvent}
         />
       );
     } else if (!userPubKey) {
@@ -429,10 +405,10 @@ export const FormFiller: React.FC<FormFillerProps> = ({
         <SubmitButton
           selfSign={true}
           edit={false}
-          onSubmit={saveResponse}
+          onSubmit={onSubmit}
           form={form}
-          formEvent={formEvent!}
-          relays={relays || []}
+          relays={getResponseRelays(formEvent)}
+          formEvent={formEvent}
         />
       );
     }
@@ -472,7 +448,12 @@ export const FormFiller: React.FC<FormFillerProps> = ({
         </Text>
       </div>
     );
-  } else if (!isPreview && formEvent?.content !== "" && !userPubKey) {
+  } else if (
+    !isPreview &&
+    formEvent?.content !== "" &&
+    !userPubKey &&
+    !viewKeyParams
+  ) {
     return (
       <>
         <Text>
@@ -504,10 +485,9 @@ export const FormFiller: React.FC<FormFillerProps> = ({
     ) as IFormSettings;
     fields = formTemplate.filter((tag) => tag[0] === "field") as Field[];
     const visibleFields = fields.filter(shouldShowQuestion);
-
+    
     return (
       <FillerStyle $isPreview={isPreview}>
-      
         {!formSubmitted && (
           <div className="filler-container">
             <div className="form-filler">
@@ -563,8 +543,7 @@ export const FormFiller: React.FC<FormFillerProps> = ({
         {embedded ? (
           formSubmitted && (
             <div className="embed-submitted">
-              {" "}
-              <Text>Response Submitted</Text>{" "}
+              <Text>Response Submitted</Text>
             </div>
           )
         ) : (
@@ -583,4 +562,5 @@ export const FormFiller: React.FC<FormFillerProps> = ({
       </FillerStyle>
     );
   }
+  return null;
 };
