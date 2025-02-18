@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react";
 import { AnswerSettings, FormSpec } from "@formstr/sdk/dist/interfaces";
-import { IFormBuilderContext, ILocalForm } from "./typeDefs";
+import { FormInitData, IFormBuilderContext, ILocalForm } from "./typeDefs";
 import { generateQuestion } from "../../utils";
 import { getDefaultRelays } from "@formstr/sdk";
 import { makeTag } from "../../../../utils/utility";
@@ -30,7 +30,7 @@ export type Field = [
 
 export const FormBuilderContext = React.createContext<IFormBuilderContext>({
   questionsList: [],
-  initializeForm: (draft: { formSpec: Tag[]; tempId: string }) => null,
+  initializeForm: (form: FormInitData) => null,
   saveForm: (onRelayAccepted?: (url: string) => void) => Promise.resolve(),
   editQuestion: (question: Field, tempId: string) => null,
   addQuestion: (primitive?: string, label?: string) => null,
@@ -71,7 +71,7 @@ const InitialFormSettings: IFormSettings = {
   thankYouPage: true,
   formId: makeTag(6),
   encryptForm: true,
-  viewKeyInUrl: true
+  viewKeyInUrl: true,
 };
 
 export default function FormBuilderProvider({
@@ -107,6 +107,9 @@ export default function FormBuilderProvider({
   const [selectedTab, setSelectedTab] = useState<string>(
     HEADER_MENU_KEYS.BUILDER
   );
+  const [secretKey, setSecretKey] = useState<string | null>(null);
+  const [viewKey, setViewKey] = useState<string | null | undefined>(null);
+
   const navigate = useNavigate();
 
   const toggleSettingsWindow = () => {
@@ -145,7 +148,9 @@ export default function FormBuilderProvider({
       viewList,
       editList,
       formSettings.encryptForm,
-      onRelayAccepted
+      onRelayAccepted,
+      secretKey,
+      viewKey
     ).then(
       (artifacts: {
         signingKey: Uint8Array;
@@ -169,8 +174,8 @@ export default function FormBuilderProvider({
         alert("error creating the form: " + error);
       }
     );
-};
-  
+  };
+
   const saveDraft = () => {
     if (formSettings.formId === "") return;
     type Draft = { formSpec: Tag[]; tempId: string };
@@ -190,10 +195,6 @@ export default function FormBuilderProvider({
     }
     console.log("setting", LOCAL_STORAGE_KEYS.DRAFT_FORMS, draftArr);
     setItem(LOCAL_STORAGE_KEYS.DRAFT_FORMS, draftArr);
-    // console.log(
-    //   "current local storage",
-    //   getItem(LOCAL_STORAGE_KEYS.DRAFT_FORMS)
-    // );
   };
 
   const editQuestion = (question: Field, tempId: string) => {
@@ -249,16 +250,25 @@ export default function FormBuilderProvider({
     }
   };
 
-  const initializeForm = (draft: { formSpec: Tag[]; tempId: string }) => {
-    let formSpec = draft.formSpec;
-    setFormName(draft.formSpec.filter((f) => f[0] === "name")?.[0][1] || "");
+  const initializeForm = (form: FormInitData) => {
+    setFormName(form.spec.filter((f) => f[0] === "name")?.[0]?.[1] || "");
     let settings = JSON.parse(
-      draft.formSpec.filter((f) => f[0] === "settings")?.[0][1] || "{}"
+      form.spec.filter((f) => f[0] === "settings")?.[0]?.[1] || "{}"
     );
     settings = { ...InitialFormSettings, ...settings };
-    let fields = draft.formSpec.filter((f) => f[0] === "field") as Field[];
+    let fields = form.spec.filter((f) => f[0] === "field") as Field[];
+    setFormSettings((settings) => {
+      return { ...settings, formId: form.id };
+    });
+    let viewList = form.spec.filter((f) => f[0] === "allowed").map((t) => t[1]);
+    let allKeys = form.spec.filter((f) => f[0] === "p").map((t) => t[1]);
+    let editList: string[] = allKeys.filter((p) => !viewList.includes(p));
+    setViewList(new Set(viewList));
+    setEditList(new Set(editList));
     setFormSettings(settings);
     setQuestionsList(fields);
+    setSecretKey(form.secret || null);
+    setViewKey(form.viewKey);
   };
 
   return (

@@ -73,7 +73,7 @@ export const getFormSpec = async (
   }
 };
 
-const getDecryptedForm = (formEvent: Event, viewKey: string) => {
+export const getDecryptedForm = (formEvent: Event, viewKey: string) => {
   let conversationKey = nip44.v2.utils.getConversationKey(
     viewKey,
     formEvent.pubkey
@@ -96,6 +96,19 @@ export const constructFormUrl = (
   let naddr = naddrUrl(pubkey, formId, [relay], viewKey);
   let baseUrl = `${window.location.origin}/#${naddr}`;
   return baseUrl;
+};
+
+export const editPath = (
+  scretKey: string,
+  formId: string,
+  relay?: string,
+  viewKey?: string
+) => {
+  const baseUrl = `/edit/${scretKey}/${formId}`;
+  const params = new URLSearchParams();
+  if (relay) params.append("relay", relay);
+  if (viewKey) params.append("viewKey", viewKey);
+  return params.toString() ? `${baseUrl}?${params.toString()}` : baseUrl;
 };
 
 export const responsePath = (

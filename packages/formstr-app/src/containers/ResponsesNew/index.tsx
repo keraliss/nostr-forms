@@ -25,8 +25,6 @@ export const Response = () => {
   const { pubkey: userPubkey, requestPubkey } = useProfileContext();
   const viewKeyParams = searchParams.get("viewKey");
 
-  console.log("params received are:", pubKey, formId, secretKey);
-
   const initialize = async () => {
     if (!formId) return;
 
@@ -46,7 +44,6 @@ export const Response = () => {
     if (!secretKey) {
       if (userPubkey) {
         let keys = await fetchKeys(formEvent.pubkey, formId, userPubkey);
-        console.log("GOT KEYS AS", keys);
         let editKey = keys?.find((k) => k[0] === "EditAccess")?.[1] || null;
         setEditKey(editKey);
       }
@@ -58,7 +55,6 @@ export const Response = () => {
       null,
       viewKeyParams
     );
-    console.log("FormSpec is", formSpec);
     setFormSpec(formSpec);
     let allowedPubkeys;
     let pubkeys = getAllowedUsers(formEvent);
@@ -138,11 +134,10 @@ export const Response = () => {
         let questionField = formSpec.find(
           (t) => t[0] === "field" && t[1] === input[1]
         );
-        if (!questionField) return;
         let question = questionField?.[3];
         const label = useLabels ? question || input[1] : input[1];
         let responseLabel = input[2];
-        if (questionField[2] === "option") {
+        if (questionField && questionField[2] === "option") {
           let choices = JSON.parse(questionField[4]) as Tag[];
           let choiceField = choices.filter((choice) => {
             return choice[0] === input[2];
@@ -211,14 +206,31 @@ export const Response = () => {
         width: 1,
       },
     ];
+    let uniqueQuestionIds: Set<string> = new Set();
+    responses?.forEach((response: Event) => {
+      let responseTags = getInputs(response);
+      responseTags.forEach((t: Tag) => uniqueQuestionIds.add(t[1]));
+    });
     let fields =
       formSpec?.filter((field) => field[0] === "field") || ([] as Field[]);
+
+    let extraFields = Array.from(uniqueQuestionIds).filter(
+      (f) => !fields.map((field) => field[1]).includes(f)
+    );
     fields.forEach((field) => {
       let [_, fieldId, __, label, ___, ____] = field;
       columns.push({
         key: fieldId,
         title: label,
         dataIndex: fieldId,
+        width: 1.5,
+      });
+    });
+    extraFields.forEach((q) => {
+      columns.push({
+        key: q,
+        title: q,
+        dataIndex: q,
         width: 1.5,
       });
     });
