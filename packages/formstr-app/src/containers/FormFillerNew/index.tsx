@@ -69,15 +69,17 @@ export const FormFiller: React.FC<FormFillerProps> = ({
   let isPreview = !!formSpec;
   if (!isPreview && !naddr)
     return <Text> Not enough data to render this url </Text>;
+  
   let decodedData;
   if (!isPreview) decodedData = nip19.decode(naddr!).data as AddressPointer;
-  let pubKey = decodedData?.pubkey;
-  let formId = decodedData?.identifier;
-  let relays = decodedData?.relays;
+  
+  const pubKey = decodedData?.pubkey;
+  const formId = decodedData?.identifier;
+  const relays = decodedData?.relays;
+  
   const { pubkey: userPubKey, requestPubkey } = useProfileContext();
-  const [formTemplate, setFormTemplate] = useState<Tag[] | null>(
-    formSpec || null
-  );
+  
+  const [formTemplate, setFormTemplate] = useState<Tag[] | null>(formSpec || null);
   const [form] = Form.useForm();
   const [formSubmitted, setFormSubmitted] = useState(false);
   const [noAccess, setNoAccess] = useState<boolean>(false);
@@ -89,15 +91,19 @@ export const FormFiller: React.FC<FormFillerProps> = ({
   const hideTitleImage = searchParams.get("hideTitleImage") === "true";
   const viewKeyParams = searchParams.get("viewKey");
   const hideDescription = searchParams.get("hideDescription") === "true";
-  const [formAnswers, setFormAnswers] = useState<
-    Record<string, string | string[]>
-  >({});
+  const [formAnswers, setFormAnswers] = useState<Record<string, string | string[]>>({});
+  const [fields, setFields] = useState<Field[]>([]);
+  const [visibleFields, setVisibleFields] = useState<Field[]>([]);
+  const [settings, setSettings] = useState<IFormSettings>({});
+  const [formName, setFormName] = useState("");
+  
   const navigate = useNavigate();
 
   if (!formId && !formSpec) {
     return null;
   }
 
+  // Define functions
   const onKeysFetched = (keys: Tag[] | null) => {
     let editKey = keys?.find((k) => k[0] === "EditAccess")?.[1] || null;
     setEditKey(editKey);
@@ -111,25 +117,36 @@ export const FormFiller: React.FC<FormFillerProps> = ({
     if (!formEvent) {
       const form = await fetchFormTemplate(formAuthor, formId, relays);
       if (!form) return;
+      
       setFormEvent(form);
       setAllowedUsers(getAllowedUsers(form));
+      
       const formSpec = await getFormSpec(
         form,
         userPubKey,
         onKeysFetched,
         viewKeyParams
       );
-      if (!formSpec) setNoAccess(true);
+      
+      if (!formSpec) {
+        setNoAccess(true);
+        return;
+      }
+      
       setFormTemplate(formSpec);
+      
+      const name = formSpec.find((tag) => tag[0] === "name")?.[1] || "";
+      setFormName(name);
+      
+      const settingsData = JSON.parse(
+        formSpec.find((tag) => tag[0] === "settings")?.[1] || "{}"
+      ) as IFormSettings;
+      setSettings(settingsData);
+      
+      const extractedFields = formSpec.filter((tag) => tag[0] === "field") as Field[];
+      setFields(extractedFields);
     }
   };
-
-  useEffect(() => {
-    if (!(pubKey && formId)) {
-      return;
-    }
-    initialize(pubKey, formId, relays);
-  }, [formEvent, formTemplate, userPubKey]);
 
   const handleInput = (
     questionId: string,
@@ -148,8 +165,17 @@ export const FormFiller: React.FC<FormFillerProps> = ({
       }));
       return;
     }
+    
     form.setFieldValue(questionId, [answer, message]);
-    setFormAnswers((prev) => ({ ...prev, [questionId]: answer }));
+    setFormAnswers((prev) => ({ 
+      ...prev, 
+      [questionId]: answer 
+    }));
+    
+    console.log("Updated form answers:", {
+      ...formAnswers,
+      [questionId]: answer
+    });
   };
 
   const getResponseRelays = (formEvent: Event) => {
@@ -170,8 +196,11 @@ export const FormFiller: React.FC<FormFillerProps> = ({
   const evaluateRule = (
     rule: ConditionRule,
     answers: Record<string, string | string[]>,
-    fields: Field[]
+    allFields: Field[]
   ): boolean => {
+    console.log("Evaluating rule:", rule);
+    console.log("With answers:", answers);
+    
     // If there's no answer or it's empty, the condition is not met
     const answer = answers[rule.questionId];
     if (
@@ -180,12 +209,16 @@ export const FormFiller: React.FC<FormFillerProps> = ({
       (typeof answer === "string" && answer === "") ||
       (Array.isArray(answer) && answer.length === 0)
     ) {
+      console.log("No answer for this question, returning false");
       return false;
     }
 
     // Find the question to determine its type
-    const question = fields.find((q) => q[1] === rule.questionId);
-    if (!question) return false;
+    const question = allFields.find((q) => q[1] === rule.questionId);
+    if (!question) {
+      console.log("Question not found, returning false");
+      return false;
+    }
 
     try {
       const answerSettings = JSON.parse(question[5] || "{}") as AnswerSettings;
@@ -194,6 +227,8 @@ export const FormFiller: React.FC<FormFillerProps> = ({
       // Get answer and rule value as strings for text comparisons
       const answerStr = String(answer);
       const ruleValueStr = String(rule.value);
+      
+      console.log(`Question type: ${questionType}, Answer: ${answerStr}, Expected: ${ruleValueStr}, Operator: ${rule.operator || "equals"}`);
 
       // Handle different question types and operators
       switch (questionType) {
@@ -206,68 +241,100 @@ export const FormFiller: React.FC<FormFillerProps> = ({
 
           if (rule.operator === "notEquals") {
             // At least one required value is not selected
-            return !requiredValues.every((value) =>
+            const result = !requiredValues.every((value) =>
               selectedValues.includes(value)
             );
+            console.log(`Checkbox notEquals result: ${result}`);
+            return result;
           }
           // Default is "equals": all required values are selected
-          return requiredValues.every((value) =>
+          const result = requiredValues.every((value) =>
             selectedValues.includes(value)
           );
+          console.log(`Checkbox equals result: ${result}`);
+          return result;
 
         case "radioButton":
         case "dropdown":
           // For single-select questions
           if (rule.operator === "notEquals") {
-            return answerStr !== ruleValueStr;
+            const result = answerStr !== ruleValueStr;
+            console.log(`Radio/Dropdown notEquals result: ${result}`);
+            return result;
           }
-          return answerStr === ruleValueStr;
+          const radioResult = answerStr === ruleValueStr;
+          console.log(`Radio/Dropdown equals result: ${radioResult}`);
+          return radioResult;
 
         case AnswerTypes.number:
           // For numbers, apply the appropriate comparison operator
           const numAnswer = Number(answer);
           const numValue = Number(rule.value);
 
-          if (isNaN(numAnswer) || isNaN(numValue)) return false;
+          if (isNaN(numAnswer) || isNaN(numValue)) {
+            console.log("NaN detected in number comparison, returning false");
+            return false;
+          }
 
+          let numResult = false;
           switch (rule.operator) {
             case "notEquals":
-              return numAnswer !== numValue;
+              numResult = numAnswer !== numValue;
+              break;
             case "greaterThan":
-              return numAnswer > numValue;
+              numResult = numAnswer > numValue;
+              break;
             case "lessThan":
-              return numAnswer < numValue;
+              numResult = numAnswer < numValue;
+              break;
             case "greaterThanEqual":
-              return numAnswer >= numValue;
+              numResult = numAnswer >= numValue;
+              break;
             case "lessThanEqual":
-              return numAnswer <= numValue;
+              numResult = numAnswer <= numValue;
+              break;
             case "equals":
             default:
-              return numAnswer === numValue;
+              numResult = numAnswer === numValue;
+              break;
           }
+          console.log(`Number comparison result: ${numResult}`);
+          return numResult;
 
         case AnswerTypes.date:
         case AnswerTypes.time:
           if (rule.operator === "notEquals") {
-            return answerStr !== ruleValueStr;
+            const result = answerStr !== ruleValueStr;
+            console.log(`Date/Time notEquals result: ${result}`);
+            return result;
           }
-          return answerStr === ruleValueStr;
+          const dateResult = answerStr === ruleValueStr;
+          console.log(`Date/Time equals result: ${dateResult}`);
+          return dateResult;
 
         default:
           // Handle text fields with various operators
+          let textResult = false;
           switch (rule.operator) {
             case "notEquals":
-              return answerStr !== ruleValueStr;
+              textResult = answerStr !== ruleValueStr;
+              break;
             case "contains":
-              return answerStr.includes(ruleValueStr);
+              textResult = answerStr.includes(ruleValueStr);
+              break;
             case "startsWith":
-              return answerStr.startsWith(ruleValueStr);
+              textResult = answerStr.startsWith(ruleValueStr);
+              break;
             case "endsWith":
-              return answerStr.endsWith(ruleValueStr);
+              textResult = answerStr.endsWith(ruleValueStr);
+              break;
             case "equals":
             default:
-              return answerStr === ruleValueStr;
+              textResult = answerStr === ruleValueStr;
+              break;
           }
+          console.log(`Text comparison result: ${textResult}`);
+          return textResult;
       }
     } catch (error) {
       console.error("Error evaluating rule:", error);
@@ -279,24 +346,33 @@ export const FormFiller: React.FC<FormFillerProps> = ({
   const evaluateGroup = (
     group: ConditionGroup,
     answers: Record<string, string | string[]>,
-    fields: Field[]
+    allFields: Field[]
   ): boolean => {
+    console.log("Evaluating group:", group);
+    
     if (!group.rules || group.rules.length === 0) {
+      console.log("No rules in group, returning true");
       return true;
     }
 
     // For backward compatibility with simple rule arrays
     if (Array.isArray(group.rules) && group.rules.length > 0 && "questionId" in group.rules[0]) {
       // Simple array of rules (old format)
-      return (group.rules as ConditionRule[]).every(rule => 
-        answers[rule.questionId] === rule.value
-      );
+      const result = (group.rules as ConditionRule[]).every(rule => {
+        const ruleResult = evaluateRule(rule, answers, allFields);
+        console.log(`Simple rule evaluation: ${ruleResult}`);
+        return ruleResult;
+      });
+      console.log(`Simple rules array result: ${result}`);
+      return result;
     }
 
     // Advanced evaluation with AND/OR logic
     let result = isConditionRule(group.rules[0])
-      ? evaluateRule(group.rules[0] as ConditionRule, answers, fields)
-      : evaluateGroup(group.rules[0] as ConditionGroup, answers, fields);
+      ? evaluateRule(group.rules[0] as ConditionRule, answers, allFields)
+      : evaluateGroup(group.rules[0] as ConditionGroup, answers, allFields);
+    
+    console.log(`First rule/group result: ${result}`);
 
     // Evaluate the rest of the rules, applying the appropriate logic operator
     for (let i = 1; i < group.rules.length; i++) {
@@ -308,40 +384,49 @@ export const FormFiller: React.FC<FormFillerProps> = ({
         ? (prevRule as ConditionRule).nextLogic
         : (prevRule as ConditionGroup).nextLogic || "AND";
       
+      console.log(`Logic type between rules ${i-1} and ${i}: ${logicType}`);
+      
       // Evaluate the current rule
       const currentResult = isConditionRule(currentRule)
-        ? evaluateRule(currentRule as ConditionRule, answers, fields)
-        : evaluateGroup(currentRule as ConditionGroup, answers, fields);
+        ? evaluateRule(currentRule as ConditionRule, answers, allFields)
+        : evaluateGroup(currentRule as ConditionGroup, answers, allFields);
+      
+      console.log(`Rule/group ${i} result: ${currentResult}`);
 
       // Apply the logic operator
       if (logicType === "AND") {
         result = result && currentResult;
+        console.log(`AND operation result: ${result}`);
       } else {
         // OR logic
         result = result || currentResult;
+        console.log(`OR operation result: ${result}`);
       }
     }
 
+    console.log(`Final group evaluation result: ${result}`);
     return result;
   };
 
   // Determine if a question should be displayed based on conditions
   const shouldShowQuestion = (question: Field): boolean => {
     try {
+      console.log("Evaluating question:", question[3]);
       const answerSettings = JSON.parse(question[5] || "{}") as AnswerSettings;
       const conditions = answerSettings.conditions;
+      console.log("Conditions:", conditions);
+      console.log("Current answers:", formAnswers);
 
       // If no conditions defined, always show the question
       if (!conditions || !conditions.rules || conditions.rules.length === 0) {
+        console.log("No conditions, showing question");
         return true;
       }
 
-      // Get all form fields for evaluation context
-      const fields =
-        (formTemplate?.filter((tag) => tag[0] === "field") as Field[]) || [];
-
       // Evaluate the conditions
-      return evaluateGroup(conditions, formAnswers, fields);
+      const result = evaluateGroup(conditions, formAnswers, fields);
+      console.log(`Should show question ${question[3]}? ${result}`);
+      return result;
     } catch (error) {
       console.error("Error in shouldShowQuestion:", error);
       return true; // On error, show the question
@@ -382,13 +467,13 @@ export const FormFiller: React.FC<FormFillerProps> = ({
     }
   };
 
-  const renderSubmitButton = (settings: IFormSettings) => {
+  const renderSubmitButton = (settingsData: IFormSettings) => {
     if (isPreview) return null;
     if (!formEvent) return null;
     if (allowedUsers.length === 0) {
       return (
         <SubmitButton
-          selfSign={settings.disallowAnonymous}
+          selfSign={settingsData.disallowAnonymous}
           edit={false}
           onSubmit={onSubmit}
           form={form}
@@ -414,9 +499,42 @@ export const FormFiller: React.FC<FormFillerProps> = ({
     }
   };
 
+  // Effect to update fields when form template changes
+  useEffect(() => {
+    if (formTemplate) {
+      const name = formTemplate.find((tag) => tag[0] === "name")?.[1] || "";
+      const settingsData = JSON.parse(
+        formTemplate.find((tag) => tag[0] === "settings")?.[1] || "{}"
+      ) as IFormSettings;
+      const extractedFields = formTemplate.filter((tag) => tag[0] === "field") as Field[];
+      
+      setFormName(name);
+      setSettings(settingsData);
+      setFields(extractedFields);
+    }
+  }, [formTemplate]);
+
+  // Effect to filter visible fields when fields or answers change
+  useEffect(() => {
+    if (fields.length > 0) {
+      const filtered = fields.filter(shouldShowQuestion);
+      console.log(`Filtering fields: ${fields.length} total, ${filtered.length} visible`);
+      setVisibleFields(filtered);
+    }
+  }, [fields, formAnswers]);
+
+  // Effect to initialize form
+  useEffect(() => {
+    if (!(pubKey && formId)) {
+      return;
+    }
+    initialize(pubKey, formId, relays);
+  }, [pubKey, formId]);
+
   if ((!pubKey || !formId) && !isPreview) {
     return <Text>INVALID FORM URL</Text>;
   }
+  
   if (!formEvent && !isPreview) {
     return (
       <div
@@ -448,12 +566,9 @@ export const FormFiller: React.FC<FormFillerProps> = ({
         </Text>
       </div>
     );
-  } else if (
-    !isPreview &&
-    formEvent?.content !== "" &&
-    !userPubKey &&
-    !viewKeyParams
-  ) {
+  } 
+  
+  if (!isPreview && formEvent?.content !== "" && !userPubKey && !viewKeyParams) {
     return (
       <>
         <Text>
@@ -469,6 +584,7 @@ export const FormFiller: React.FC<FormFillerProps> = ({
       </>
     );
   }
+  
   if (noAccess) {
     return (
       <>
@@ -477,90 +593,80 @@ export const FormFiller: React.FC<FormFillerProps> = ({
       </>
     );
   }
-  let name: string, settings: IFormSettings, fields: Field[];
-  if (formTemplate) {
-    name = formTemplate.find((tag) => tag[0] === "name")?.[1] || "";
-    settings = JSON.parse(
-      formTemplate.find((tag) => tag[0] === "settings")?.[1] || "{}"
-    ) as IFormSettings;
-    fields = formTemplate.filter((tag) => tag[0] === "field") as Field[];
-    const visibleFields = fields.filter(shouldShowQuestion);
-    
-    return (
-      <FillerStyle $isPreview={isPreview}>
-        {!formSubmitted && (
-          <div className="filler-container">
-            <div className="form-filler">
-              {!hideTitleImage && (
-                <FormTitle
-                  className="form-title"
-                  edit={false}
-                  imageUrl={settings?.titleImageUrl}
-                  formTitle={name}
-                />
-              )}
-              {!hideDescription && (
-                <div className="form-description">
-                  <Text>
-                    <Markdown>{settings?.description}</Markdown>
-                  </Text>
-                </div>
-              )}
 
-              <Form
-                form={form}
-                onFinish={() => {}}
-                className={
-                  hideDescription ? "hidden-description" : "with-description"
-                }
-              >
-                <div>
-                  <FormFields
-                    fields={visibleFields}
-                    handleInput={handleInput}
-                  />
-                  <>{renderSubmitButton(settings)}</>
-                </div>
-              </Form>
-            </div>
-            <div className="branding-container">
-              <Link to="/">
-                <CreatedUsingFormstr />
-              </Link>
-              {!isMobile() && (
-                <a
-                  href="https://github.com/abhay-raizada/nostr-forms"
-                  className="foss-link"
-                >
-                  <Text className="text-style">
-                    Formstr is free and Open Source
-                  </Text>
-                </a>
-              )}
-            </div>
-          </div>
-        )}
-        {embedded ? (
-          formSubmitted && (
-            <div className="embed-submitted">
-              <Text>Response Submitted</Text>
-            </div>
-          )
-        ) : (
-          <ThankYouScreen
-            isOpen={thankYouScreen}
-            onClose={() => {
-              if (!embedded) {
-                let navigationUrl = editKey ? `/r/${pubKey}/${formId}` : `/`;
-                navigate(navigationUrl);
-              } else {
-                setThankYouScreen(false);
+  return (
+    <FillerStyle $isPreview={isPreview}>
+      {!formSubmitted && (
+        <div className="filler-container">
+          <div className="form-filler">
+            {!hideTitleImage && (
+              <FormTitle
+                className="form-title"
+                edit={false}
+                imageUrl={settings?.titleImageUrl}
+                formTitle={formName}
+              />
+            )}
+            {!hideDescription && (
+              <div className="form-description">
+                <Text>
+                  <Markdown>{settings?.description}</Markdown>
+                </Text>
+              </div>
+            )}
+
+            <Form
+              form={form}
+              onFinish={() => {}}
+              className={
+                hideDescription ? "hidden-description" : "with-description"
               }
-            }}
-          />
-        )}
-      </FillerStyle>
-    );
-  }
-  return null;
+            >
+              <div>
+                <FormFields
+                  fields={visibleFields}
+                  handleInput={handleInput}
+                />
+                <>{renderSubmitButton(settings)}</>
+              </div>
+            </Form>
+          </div>
+          <div className="branding-container">
+            <Link to="/">
+              <CreatedUsingFormstr />
+            </Link>
+            {!isMobile() && (
+              <a
+                href="https://github.com/abhay-raizada/nostr-forms"
+                className="foss-link"
+              >
+                <Text className="text-style">
+                  Formstr is free and Open Source
+                </Text>
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+      {embedded ? (
+        formSubmitted && (
+          <div className="embed-submitted">
+            <Text>Response Submitted</Text>
+          </div>
+        )
+      ) : (
+        <ThankYouScreen
+          isOpen={thankYouScreen}
+          onClose={() => {
+            if (!embedded) {
+              let navigationUrl = editKey ? `/r/${pubKey}/${formId}` : `/`;
+              navigate(navigationUrl);
+            } else {
+              setThankYouScreen(false);
+            }
+          }}
+        />
+      )}
+    </FillerStyle>
+  );
 };
