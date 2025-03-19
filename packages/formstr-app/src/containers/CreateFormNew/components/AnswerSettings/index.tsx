@@ -7,7 +7,7 @@ import StyleWrapper from "./style";
 import { RightAnswer } from "./RightAnswer";
 import { IAnswerSettings } from "./types";
 import { Field } from "../../../../nostr/types";
-import Conditions from "./Conditions";
+import Conditions from "./Conditions/Conditions";
 
 const { Text } = Typography;
 

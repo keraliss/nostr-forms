@@ -357,8 +357,8 @@ export const FormFiller: React.FC<FormFillerProps> = ({
 
     // For backward compatibility with simple rule arrays
     if (Array.isArray(group.rules) && group.rules.length > 0 && "questionId" in group.rules[0]) {
-      // Simple array of rules (old format)
-      const result = (group.rules as ConditionRule[]).every(rule => {
+      // Simple array of rules - if ANY rule passes, return true (OR logic)
+      const result = (group.rules as ConditionRule[]).some(rule => {
         const ruleResult = evaluateRule(rule, answers, allFields);
         console.log(`Simple rule evaluation: ${ruleResult}`);
         return ruleResult;
