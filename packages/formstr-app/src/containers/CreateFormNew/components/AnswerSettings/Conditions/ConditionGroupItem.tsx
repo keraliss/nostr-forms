@@ -1,11 +1,12 @@
-// ConditionGroupItem.tsx
-import React from "react";
+import React, { useMemo } from "react";
 import { Button, Typography, Card } from "antd";
 import { PlusOutlined, DeleteOutlined } from "@ant-design/icons";
-import { ConditionGroup, ConditionRule, isConditionRule } from "./types";
+import { ConditionGroup, ConditionRule } from "./types";
 import { Field } from "../../../providers/FormBuilder";
+import { isConditionRule } from "./utils";
 import ConditionRuleItem from "./ConditionRuleItem";
 import LogicSelector from "./LogicSelector";
+import { BADGE_STYLES, CARD_STYLES, LAYOUT_STYLES } from "./StyleWrapper";
 
 const { Text } = Typography;
 
@@ -15,7 +16,12 @@ interface ConditionGroupItemProps {
   isLastItem: boolean;
   questionsList: Field[];
   availableQuestions: Field[];
-  onUpdateRule: (groupIndex: number, ruleIndex: number, field: string, value: any) => void;
+  onUpdateRule: (
+    groupIndex: number,
+    ruleIndex: number,
+    field: string,
+    value: any
+  ) => void;
   onRemoveRule: (groupIndex: number, ruleIndex: number) => void;
   onAddNestedRule: (groupIndex: number) => void;
   onRemoveGroup: (groupIndex: number) => void;
@@ -42,75 +48,55 @@ const ConditionGroupItem: React.FC<ConditionGroupItemProps> = ({
     onUpdateGroupLogic(groupIndex, value);
   };
 
+  const conditionRules = useMemo(
+    () =>
+      group.rules.filter((rule) => isConditionRule(rule)) as ConditionRule[],
+    [group.rules]
+  );
+
   return (
-    <Card 
+    <Card
       className="rule-set-card"
       title={
-        <div style={{ 
-          display: 'flex', 
-          alignItems: 'center'
-        }}>
-          <div style={{ 
-            width: '28px', 
-            height: '28px', 
-            borderRadius: '4px', 
-            background: '#1890ff', 
-            color: 'white', 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center',
-            marginRight: '10px',
-            fontWeight: 'bold'
-          }}>
-            RS
-          </div>
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <div style={BADGE_STYLES.ruleSetBadge}>RS</div>
           <Text strong>Rule Set {groupIndex + 1}</Text>
         </div>
       }
       bordered={true}
-      style={{ 
-        marginBottom: '24px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.09)',
-        borderRadius: '8px',
-        borderColor: '#d9d9d9',
-        borderWidth: '1px',
-        borderStyle: 'solid'
-      }}
-      bodyStyle={{ padding: '16px' }}
+      style={CARD_STYLES.ruleSetCard}
+      bodyStyle={{ padding: "16px" }}
     >
       <div className="rule-set-content">
         <div className="nested-content">
-          {group.rules.length === 0 ? (
+          {conditionRules.length === 0 ? (
             <Text type="secondary">
               No conditions in this rule set. Add one below.
             </Text>
           ) : (
-            group.rules.map((nestedRule, nestedIndex) => {
-              if (isConditionRule(nestedRule)) {
-                return (
-                  <div key={nestedIndex} className="condition-rule nested-rule">
-                    <ConditionRuleItem
-                      rule={nestedRule as ConditionRule}
-                      index={nestedIndex}
-                      isLastItem={nestedIndex === group.rules.length - 1}
-                      questionsList={questionsList}
-                      availableQuestions={availableQuestions}
-                      groupIndex={groupIndex}
-                      onUpdate={(index, field, value) => onUpdateRule(groupIndex, index, field, value)}
-                      onRemove={(index) => onRemoveRule(groupIndex, index)}
-                    />
-                  </div>
-                );
-              }
-              return null;
-            })
+            conditionRules.map((rule, nestedIndex) => (
+              <div key={nestedIndex} className="condition-rule nested-rule">
+                <ConditionRuleItem
+                  rule={rule}
+                  index={nestedIndex}
+                  isLastItem={nestedIndex === conditionRules.length - 1}
+                  questionsList={questionsList}
+                  availableQuestions={availableQuestions}
+                  groupIndex={groupIndex}
+                  onUpdate={(index, field, value) =>
+                    onUpdateRule(groupIndex, index, field, value)
+                  }
+                  onRemove={(index) => onRemoveRule(groupIndex, index)}
+                />
+              </div>
+            ))
           )}
 
           <Button
             type="dashed"
             onClick={handleAddNestedRule}
             icon={<PlusOutlined />}
-            style={{ marginTop: 16, width: '100%' }}
+            style={LAYOUT_STYLES.fullWidthButton}
           >
             Add Condition to Rule Set
           </Button>
@@ -131,7 +117,7 @@ const ConditionGroupItem: React.FC<ConditionGroupItemProps> = ({
           icon={<DeleteOutlined />}
           onClick={() => onRemoveGroup(groupIndex)}
           className="remove-button"
-          style={{ marginTop: '16px' }}
+          style={{ marginTop: "16px" }}
         >
           Remove Rule Set
         </Button>

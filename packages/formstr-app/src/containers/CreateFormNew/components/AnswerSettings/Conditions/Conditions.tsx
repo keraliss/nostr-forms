@@ -1,13 +1,11 @@
-// Conditions.tsx
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Button, Space, Typography, Modal, Divider, Badge, Tooltip } from "antd";
 import { PlusOutlined, SettingOutlined, InfoCircleOutlined } from "@ant-design/icons";
 import useFormBuilderContext from "../../../hooks/useFormBuilderContext";
 import { AnswerTypes } from "@formstr/sdk/dist/interfaces";
-import { ConditionRule, ConditionGroup, isConditionRule, ConditionsProps } from "./types";
-import { getQuestionLabel } from "./utils";
+import { ConditionRule, ConditionGroup, ConditionsProps } from "./types";
+import { getQuestionLabel, isConditionRule } from "./utils";
 import StyleWrapper from "./StyleWrapper";
-import ConditionRuleItem from "./ConditionRuleItem";
 import ConditionGroupItem from "./ConditionGroupItem";
 
 const { Text } = Typography;
@@ -20,8 +18,9 @@ const Conditions: React.FC<ConditionsProps> = ({
   const [isModalOpen, setIsModalOpen] = useState(false);
   
   // Get all questions except the current one (to avoid circular dependencies)
-  const availableQuestions = questionsList.filter(
-    (q) => q[1] !== questionIdInFocus
+  const availableQuestions = useMemo(() => 
+    questionsList.filter(q => q[1] !== questionIdInFocus),
+    [questionsList, questionIdInFocus]
   );
 
   const conditions = answerSettings.conditions || {
@@ -62,39 +61,51 @@ const Conditions: React.FC<ConditionsProps> = ({
     });
   };
 
-  const updateRule = (index: number, field: string, value: any, groupIndex?: number) => {
-    if (typeof groupIndex === 'number') {
-      // Update nested rule within a group
-      updateNestedRule(groupIndex, index, field, value);
+  const updateRuleSetLogic = (index: number, value: "AND" | "OR") => {
+    const newRules = [...conditions.rules];
+    const group = newRules[index] as ConditionGroup;
+    
+    newRules[index] = {
+      ...group,
+      nextLogic: value,
+    };
+
+    handleAnswerSettings({
+      conditions: {
+        ...conditions,
+        rules: newRules,
+      },
+    });
+  };
+
+  const updateNestedRule = (
+    groupIndex: number,
+    ruleIndex: number,
+    field: string,
+    value: any
+  ) => {
+    const newRules = [...conditions.rules];
+    const group = newRules[groupIndex] as ConditionGroup;
+    const currentRule = group.rules[ruleIndex];
+
+    if (!isConditionRule(currentRule)) {
       return;
     }
 
-    const newRules = [...conditions.rules];
-    if (field === "questionId") {
-      const questionType = getQuestionType(value);
-      const existingRule = newRules[index] as ConditionRule;
-      const nextLogic = existingRule.nextLogic || "AND";
+    const rule = currentRule as ConditionRule;
 
-      newRules[index] = {
+    if (field === "questionId") {
+      group.rules[ruleIndex] = {
         questionId: value,
-        value: questionType === AnswerTypes.checkboxes ? [] : "",
+        value: getQuestionType(value, availableQuestions) === AnswerTypes.checkboxes ? [] : "",
         operator: "equals",
-        nextLogic: nextLogic,
+        nextLogic: rule.nextLogic || "AND",
       };
     } else {
-      if (isConditionRule(newRules[index])) {
-        const rule = newRules[index] as ConditionRule;
-        newRules[index] = {
-          ...rule,
-          [field]: value,
-        };
-      } else if (field === "logicType" || field === "nextLogic") {
-        const group = newRules[index] as ConditionGroup;
-        newRules[index] = {
-          ...group,
-          [field]: value,
-        };
-      }
+      group.rules[ruleIndex] = {
+        ...rule,
+        [field]: value,
+      };
     }
 
     handleAnswerSettings({
@@ -126,44 +137,6 @@ const Conditions: React.FC<ConditionsProps> = ({
     });
   };
 
-  const updateNestedRule = (
-    groupIndex: number,
-    ruleIndex: number,
-    field: string,
-    value: any
-  ) => {
-    const newRules = [...conditions.rules];
-    const group = newRules[groupIndex] as ConditionGroup;
-
-    if (!isConditionRule(group.rules[ruleIndex])) {
-      return;
-    }
-
-    const rule = group.rules[ruleIndex] as ConditionRule;
-
-    if (field === "questionId") {
-      const questionType = getQuestionType(value);
-      group.rules[ruleIndex] = {
-        questionId: value,
-        value: questionType === AnswerTypes.checkboxes ? [] : "",
-        operator: "equals",
-        nextLogic: rule.nextLogic || "AND",
-      };
-    } else {
-      group.rules[ruleIndex] = {
-        ...rule,
-        [field]: value,
-      };
-    }
-
-    handleAnswerSettings({
-      conditions: {
-        ...conditions,
-        rules: newRules,
-      },
-    });
-  };
-
   const removeNestedRule = (groupIndex: number, ruleIndex: number) => {
     const newRules = [...conditions.rules];
     const group = newRules[groupIndex] as ConditionGroup;
@@ -178,7 +151,7 @@ const Conditions: React.FC<ConditionsProps> = ({
   };
 
   // Helper to get question type (for default values)
-  const getQuestionType = (questionId: string): string => {
+  const getQuestionType = (questionId: string, availableQuestions: any[]): string => {
     const question = availableQuestions.find((q) => q[1] === questionId);
     if (!question) return AnswerTypes.shortText;
 
@@ -258,42 +231,39 @@ const Conditions: React.FC<ConditionsProps> = ({
               conditions.rules.map((rule, index) => {
                 const isLastItem = index === conditions.rules.length - 1;
 
-
-                // Only render ConditionGroup items
-                if (!isConditionRule(rule)) {
-                  return (
-                    <div key={index}>
-                      <ConditionGroupItem
-                        group={rule as ConditionGroup}
-                        groupIndex={index}
-                        isLastItem={index === conditions.rules.length - 1}
-                        questionsList={questionsList}
-                        availableQuestions={availableQuestions}
-                        onUpdateRule={updateNestedRule}
-                        onRemoveRule={removeNestedRule}
-                        onAddNestedRule={addNestedRule}
-                        onRemoveGroup={handleRemoveRule}
-                        onUpdateGroupLogic={(groupIndex, value) => 
-                          updateRule(groupIndex, "nextLogic", value)
-                        }
-                      />
-                      
-                      {/* Logic connector between groups */}
-                      {!isLastItem && (
-                        <div className="inter-group-connector">
-                          <Divider>
-                            <div className={`logic-badge ${(rule as ConditionGroup).nextLogic === 'OR' ? 'or' : ''}`}>
-                              {(rule as ConditionGroup).nextLogic || 'AND'}
-                            </div>
-                          </Divider>
-                          <div className="connection-label" style={{ textAlign: 'center', marginTop: '-10px' }}>
+                const group = rule as ConditionGroup;
+                
+                return (
+                  <div key={index}>
+                    <ConditionGroupItem
+                      group={group}
+                      groupIndex={index}
+                      isLastItem={isLastItem}
+                      questionsList={questionsList}
+                      availableQuestions={availableQuestions}
+                      onUpdateRule={updateNestedRule}
+                      onRemoveRule={removeNestedRule}
+                      onAddNestedRule={addNestedRule}
+                      onRemoveGroup={handleRemoveRule}
+                      onUpdateGroupLogic={(groupIndex, value) => 
+                        updateRuleSetLogic(groupIndex, value)
+                      }
+                    />
+                    
+                    {!isLastItem && (
+                      <div className="inter-group-connector">
+                        <Divider>
+                          <div className={`logic-badge ${group.nextLogic === 'OR' ? 'or' : ''}`}>
+                            {group.nextLogic || 'AND'}
                           </div>
+                        </Divider>
+                        <div className="connection-label" style={{ textAlign: 'center', marginTop: '-10px' }}>
+                          <Text type="secondary">Connect with next rule set</Text>
                         </div>
-                      )}
-                    </div>
-                  );
-                }
-                return null;
+                      </div>
+                    )}
+                  </div>
+                );
               })
             )}
 

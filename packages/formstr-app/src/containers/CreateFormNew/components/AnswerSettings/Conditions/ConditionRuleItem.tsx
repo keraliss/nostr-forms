@@ -5,6 +5,7 @@ import { ConditionRule } from "./types";
 import { Field } from "../../../providers/FormBuilder";
 import ConditionValueInput from "./ConditionValueInput";
 import LogicSelector from "./LogicSelector";
+import { COLORS } from "./StyleWrapper";
 
 const { Text } = Typography;
 
@@ -45,7 +46,7 @@ const ConditionRuleItem: React.FC<ConditionRuleItemProps> = ({
     <div className="rule-content">
       <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}>
         <Badge 
-          color="#52c41a" 
+          color={COLORS.SUCCESS}
           style={{ marginRight: '8px' }} 
         />
         <Text strong>Condition {index + 1}</Text>

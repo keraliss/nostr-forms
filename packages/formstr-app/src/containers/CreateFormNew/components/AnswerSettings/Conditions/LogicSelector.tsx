@@ -1,6 +1,7 @@
 import React from "react";
 import { Select, Typography } from "antd";
-import { ConditionRule, ConditionGroup, isConditionRule } from "./types";
+import { ConditionRule, ConditionGroup } from "./types";
+import { COLORS, BADGE_STYLES } from "./StyleWrapper";
 
 const { Text } = Typography;
 
@@ -29,16 +30,8 @@ const LogicSelector: React.FC<LogicSelectorProps> = ({
     <div className="logic-selector">
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
         <div style={{ 
-          width: '24px', 
-          height: '24px', 
-          display: 'flex', 
-          alignItems: 'center', 
-          justifyContent: 'center', 
-          background: logicValue === 'AND' ? '#1890ff' : '#ff4d4f',
-          color: 'white',
-          borderRadius: '4px',
-          fontSize: '12px',
-          fontWeight: 'bold',
+          ...BADGE_STYLES.logicBadge,
+          background: logicValue === 'AND' ? COLORS.PRIMARY : COLORS.DANGER,
           marginRight: '8px',
           marginTop: '8px',
           padding: '2px 4px',
@@ -61,16 +54,8 @@ const LogicSelector: React.FC<LogicSelectorProps> = ({
         >
           <div style={{ display: 'flex', alignItems: 'center' }}>
             <div style={{ 
-              width: '24px', 
-              height: '24px', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              background: '#1890ff',
-              color: 'white',
-              borderRadius: '4px',
-              fontSize: '12px',
-              fontWeight: 'bold',
+              ...BADGE_STYLES.logicBadge,
+              background: COLORS.PRIMARY,
               marginRight: '8px',
             }}>
               AND
@@ -84,16 +69,8 @@ const LogicSelector: React.FC<LogicSelectorProps> = ({
         >
           <div style={{ display: 'flex', alignItems: 'center' }}>
             <div style={{ 
-              width: '24px', 
-              height: '24px', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center', 
-              background: '#ff4d4f',
-              color: 'white',
-              borderRadius: '4px',
-              fontSize: '12px',
-              fontWeight: 'bold',
+              ...BADGE_STYLES.logicBadge,
+              background: COLORS.DANGER,
               marginRight: '8px',
             }}>
               OR

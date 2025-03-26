@@ -25,29 +25,8 @@ import { AddressPointer } from "nostr-tools/nip19";
 import { LoadingOutlined } from "@ant-design/icons";
 import { sendNotification } from "../../nostr/common";
 import { sendResponses } from "../../nostr/common";
-import { AnswerTypes } from "@formstr/sdk/dist/interfaces";
-
-// Define interfaces for condition rules and groups
-interface ConditionRule {
-  questionId: string;
-  value: string | string[];
-  operator?:
-    | "equals"
-    | "notEquals"
-    | "contains"
-    | "startsWith"
-    | "endsWith"
-    | "greaterThan"
-    | "lessThan"
-    | "greaterThanEqual"
-    | "lessThanEqual";
-  nextLogic?: "AND" | "OR"; // How this rule combines with the next one
-}
-
-interface ConditionGroup {
-  rules: (ConditionRule | ConditionGroup)[];
-  nextLogic?: "AND" | "OR"; // How this group combines with the next element
-}
+import { shouldShowQuestion } from "../CreateFormNew/components/AnswerSettings/Conditions/utils";
+import { ConditionGroup } from "../CreateFormNew/components/AnswerSettings/Conditions/types";
 
 interface AnswerSettings {
   conditions?: ConditionGroup;
@@ -185,231 +164,7 @@ export const FormFiller: React.FC<FormFillerProps> = ({
     return Array.from(new Set([...(relays || []), ...(formRelays || [])]));
   };
 
-  // Determine if a condition is a rule or a group
-  function isConditionRule(
-    condition: ConditionRule | ConditionGroup
-  ): condition is ConditionRule {
-    return "questionId" in condition;
-  }
-
-  // Evaluate a single condition rule
-  const evaluateRule = (
-    rule: ConditionRule,
-    answers: Record<string, string | string[]>,
-    allFields: Field[]
-  ): boolean => {
-    console.log("Evaluating rule:", rule);
-    console.log("With answers:", answers);
-    
-    // If there's no answer or it's empty, the condition is not met
-    const answer = answers[rule.questionId];
-    if (
-      answer === undefined ||
-      answer === null ||
-      (typeof answer === "string" && answer === "") ||
-      (Array.isArray(answer) && answer.length === 0)
-    ) {
-      console.log("No answer for this question, returning false");
-      return false;
-    }
-
-    // Find the question to determine its type
-    const question = allFields.find((q) => q[1] === rule.questionId);
-    if (!question) {
-      console.log("Question not found, returning false");
-      return false;
-    }
-
-    try {
-      const answerSettings = JSON.parse(question[5] || "{}") as AnswerSettings;
-      const questionType = answerSettings.renderElement || "shortText";
-
-      // Get answer and rule value as strings for text comparisons
-      const answerStr = String(answer);
-      const ruleValueStr = String(rule.value);
-      
-      console.log(`Question type: ${questionType}, Answer: ${answerStr}, Expected: ${ruleValueStr}, Operator: ${rule.operator || "equals"}`);
-
-      // Handle different question types and operators
-      switch (questionType) {
-        case "checkboxes":
-          // For checkboxes, check if all required values are selected
-          const selectedValues = Array.isArray(answer) ? answer : [answer];
-          const requiredValues = Array.isArray(rule.value)
-            ? rule.value
-            : [rule.value];
-
-          if (rule.operator === "notEquals") {
-            // At least one required value is not selected
-            const result = !requiredValues.every((value) =>
-              selectedValues.includes(value)
-            );
-            console.log(`Checkbox notEquals result: ${result}`);
-            return result;
-          }
-          // Default is "equals": all required values are selected
-          const result = requiredValues.every((value) =>
-            selectedValues.includes(value)
-          );
-          console.log(`Checkbox equals result: ${result}`);
-          return result;
-
-        case "radioButton":
-        case "dropdown":
-          // For single-select questions
-          if (rule.operator === "notEquals") {
-            const result = answerStr !== ruleValueStr;
-            console.log(`Radio/Dropdown notEquals result: ${result}`);
-            return result;
-          }
-          const radioResult = answerStr === ruleValueStr;
-          console.log(`Radio/Dropdown equals result: ${radioResult}`);
-          return radioResult;
-
-        case AnswerTypes.number:
-          // For numbers, apply the appropriate comparison operator
-          const numAnswer = Number(answer);
-          const numValue = Number(rule.value);
-
-          if (isNaN(numAnswer) || isNaN(numValue)) {
-            console.log("NaN detected in number comparison, returning false");
-            return false;
-          }
-
-          let numResult = false;
-          switch (rule.operator) {
-            case "notEquals":
-              numResult = numAnswer !== numValue;
-              break;
-            case "greaterThan":
-              numResult = numAnswer > numValue;
-              break;
-            case "lessThan":
-              numResult = numAnswer < numValue;
-              break;
-            case "greaterThanEqual":
-              numResult = numAnswer >= numValue;
-              break;
-            case "lessThanEqual":
-              numResult = numAnswer <= numValue;
-              break;
-            case "equals":
-            default:
-              numResult = numAnswer === numValue;
-              break;
-          }
-          console.log(`Number comparison result: ${numResult}`);
-          return numResult;
-
-        case AnswerTypes.date:
-        case AnswerTypes.time:
-          if (rule.operator === "notEquals") {
-            const result = answerStr !== ruleValueStr;
-            console.log(`Date/Time notEquals result: ${result}`);
-            return result;
-          }
-          const dateResult = answerStr === ruleValueStr;
-          console.log(`Date/Time equals result: ${dateResult}`);
-          return dateResult;
-
-        default:
-          // Handle text fields with various operators
-          let textResult = false;
-          switch (rule.operator) {
-            case "notEquals":
-              textResult = answerStr !== ruleValueStr;
-              break;
-            case "contains":
-              textResult = answerStr.includes(ruleValueStr);
-              break;
-            case "startsWith":
-              textResult = answerStr.startsWith(ruleValueStr);
-              break;
-            case "endsWith":
-              textResult = answerStr.endsWith(ruleValueStr);
-              break;
-            case "equals":
-            default:
-              textResult = answerStr === ruleValueStr;
-              break;
-          }
-          console.log(`Text comparison result: ${textResult}`);
-          return textResult;
-      }
-    } catch (error) {
-      console.error("Error evaluating rule:", error);
-      return false;
-    }
-  };
-
-  // Evaluate a group of conditions
-  const evaluateGroup = (
-    group: ConditionGroup,
-    answers: Record<string, string | string[]>,
-    allFields: Field[]
-  ): boolean => {
-    console.log("Evaluating group:", group);
-    
-    if (!group.rules || group.rules.length === 0) {
-      console.log("No rules in group, returning true");
-      return true;
-    }
-
-    // For backward compatibility with simple rule arrays
-    if (Array.isArray(group.rules) && group.rules.length > 0 && "questionId" in group.rules[0]) {
-      // Simple array of rules - if ANY rule passes, return true (OR logic)
-      const result = (group.rules as ConditionRule[]).some(rule => {
-        const ruleResult = evaluateRule(rule, answers, allFields);
-        console.log(`Simple rule evaluation: ${ruleResult}`);
-        return ruleResult;
-      });
-      console.log(`Simple rules array result: ${result}`);
-      return result;
-    }
-
-    // Advanced evaluation with AND/OR logic
-    let result = isConditionRule(group.rules[0])
-      ? evaluateRule(group.rules[0] as ConditionRule, answers, allFields)
-      : evaluateGroup(group.rules[0] as ConditionGroup, answers, allFields);
-    
-    console.log(`First rule/group result: ${result}`);
-
-    // Evaluate the rest of the rules, applying the appropriate logic operator
-    for (let i = 1; i < group.rules.length; i++) {
-      const prevRule = group.rules[i - 1];
-      const currentRule = group.rules[i];
-
-      // Get the logic type from the previous rule or default to AND
-      const logicType = isConditionRule(prevRule)
-        ? (prevRule as ConditionRule).nextLogic
-        : (prevRule as ConditionGroup).nextLogic || "AND";
-      
-      console.log(`Logic type between rules ${i-1} and ${i}: ${logicType}`);
-      
-      // Evaluate the current rule
-      const currentResult = isConditionRule(currentRule)
-        ? evaluateRule(currentRule as ConditionRule, answers, allFields)
-        : evaluateGroup(currentRule as ConditionGroup, answers, allFields);
-      
-      console.log(`Rule/group ${i} result: ${currentResult}`);
-
-      // Apply the logic operator
-      if (logicType === "AND") {
-        result = result && currentResult;
-        console.log(`AND operation result: ${result}`);
-      } else {
-        // OR logic
-        result = result || currentResult;
-        console.log(`OR operation result: ${result}`);
-      }
-    }
-
-    console.log(`Final group evaluation result: ${result}`);
-    return result;
-  };
-
-  // Determine if a question should be displayed based on conditions
-  const shouldShowQuestion = (question: Field): boolean => {
+  const evaluateQuestionVisibility = (question: Field): boolean => {
     try {
       console.log("Evaluating question:", question[3]);
       const answerSettings = JSON.parse(question[5] || "{}") as AnswerSettings;
@@ -423,13 +178,12 @@ export const FormFiller: React.FC<FormFillerProps> = ({
         return true;
       }
 
-      // Evaluate the conditions
-      const result = evaluateGroup(conditions, formAnswers, fields);
+      const result = shouldShowQuestion(question, formAnswers);
       console.log(`Should show question ${question[3]}? ${result}`);
       return result;
     } catch (error) {
-      console.error("Error in shouldShowQuestion:", error);
-      return true; // On error, show the question
+      console.error("Error in evaluateQuestionVisibility:", error);
+      return true;
     }
   };
 
@@ -517,7 +271,7 @@ export const FormFiller: React.FC<FormFillerProps> = ({
   // Effect to filter visible fields when fields or answers change
   useEffect(() => {
     if (fields.length > 0) {
-      const filtered = fields.filter(shouldShowQuestion);
+      const filtered = fields.filter(evaluateQuestionVisibility);
       console.log(`Filtering fields: ${fields.length} total, ${filtered.length} visible`);
       setVisibleFields(filtered);
     }
