@@ -18,24 +18,31 @@ const { Text } = Typography;
 interface FormFillerProps {
   formSpec?: Tag[];
   embedded?: boolean;
+  naddr?: string;
+  viewKey?: string;
 }
 
-export const FormFiller: React.FC<FormFillerProps> = ({ formSpec }) => {
-  const { naddr } = useParams();
-  let isPreview = !!formSpec;
+export const FormFiller: React.FC<FormFillerProps> = ({
+  formSpec,
+  naddr: _naddr,
+  viewKey: _viewKey,
+}) => {
+  let { naddr } = useParams();
+  naddr = naddr || _naddr;
+  const isPreview = !!formSpec;
   if (!isPreview && !naddr)
     return <Text> Not enough data to render this url </Text>;
   let decodedData;
   if (!isPreview) decodedData = nip19.decode(naddr!).data as AddressPointer;
-  let pubKey = decodedData?.pubkey;
-  let formId = decodedData?.identifier;
-  let relays = decodedData?.relays;
+  const pubKey = decodedData?.pubkey;
+  const formId = decodedData?.identifier;
+  const relays = decodedData?.relays;
   const { pubkey: userPubKey, requestPubkey } = useProfileContext();
   const [formSubmitted, setFormSubmitted] = useState(false);
   const [formEvent, setFormEvent] = useState<Event | undefined>();
   const [searchParams] = useSearchParams();
   const hideTitleImage = searchParams.get("hideTitleImage") === "true";
-  const viewKeyParams = searchParams.get("viewKey");
+  const viewKeyParams = searchParams.get("viewKey") || _viewKey || "";
   const hideDescription = searchParams.get("hideDescription") === "true";
   const navigate = useNavigate();
 
@@ -49,7 +56,7 @@ export const FormFiller: React.FC<FormFillerProps> = ({ formSpec }) => {
   const initialize = async (
     formAuthor: string,
     formId: string,
-    relays?: string[]
+    relays?: string[],
   ) => {
     const form = await fetchFormTemplate(
       formAuthor,
@@ -58,7 +65,7 @@ export const FormFiller: React.FC<FormFillerProps> = ({ formSpec }) => {
       (event: Event) => {
         setFormEvent(event);
       },
-      relays
+      relays,
     );
   };
 
@@ -133,7 +140,7 @@ export const FormFiller: React.FC<FormFillerProps> = ({ formSpec }) => {
     return (
       <>
         <FormRendererContainer
-          formEvent={formEvent!}
+          formEvent={formEvent}
           onSubmitClick={onSubmit}
           viewKey={viewKeyParams}
           hideTitleImage={hideTitleImage}
